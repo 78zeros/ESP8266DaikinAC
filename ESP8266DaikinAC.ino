@@ -5,14 +5,10 @@
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+#include <TimeLib.h>
 
 char ssid[] = "xxxxx";  //  your network SSID (name)
 char pass[] = "xxxxx";       // your network password
-
-int timeHour = 0;
-int timeMin = 0;
-int timeSec = 0;
-
 
 int hpTemp = 19;
 
@@ -24,57 +20,19 @@ ESP8266WebServer server(80);
 
 const int led = 13;
 
-void handleRoot() {
-  digitalWrite(led, 1);
-
-  char htmlContent[] = "<HTML><HEAD><TITLE>Besthaus Climate Control MK2</TITLE></HEAD>"
-                       "<BODY><H1>Besthaus Climate Control MK2</H1>"
-                       "<h4>Heat Pump Controls</h4>"
-                       "<a href=\"/HPheat\">Heat to 19 degrees C</a><br>"
-                       "<a href=\"/HPcool\">Cool to 19 degrees C</a><br>"
-                       "<a href=\"/HPauto\">Auto to 19 degrees C</a><br>"
-                       "<a href=\"/HPoff\">OFF</a><br>"
-                       "<a href=\"/gettime\">Update Time</a><br>";
-
-  server.send(200, "text/html", htmlContent);
-  digitalWrite(led, 0);
-
-}
-
-
-void handleNotFound() {
-  digitalWrite(led, 1);
-  String message = "File Not Found\n\n";
-  message += "URI: ";
-  message += server.uri();
-  message += "\nMethod: ";
-  message += (server.method() == HTTP_GET) ? "GET" : "POST";
-  message += "\nArguments: ";
-  message += server.args();
-  message += "\n";
-  for (uint8_t i = 0; i < server.args(); i++) {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
-  }
-  server.send(404, "text/plain", message);
-  digitalWrite(led, 0);
-}
-
-
-
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
-/* Don't hardwire the IP address or we won't get the benefits of the pool.
-    Lookup the IP address for the host name instead */
-//IPAddress timeServer(129, 6, 15, 28); // time.nist.gov NTP server
-IPAddress timeServerIP; // time.nist.gov NTP server address
+IPAddress timeServerIP; 
 const char* ntpServerName = "time.iinet.net.au";
 
-const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
-
-byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+const int timeZone = 11;
 
 // A UDP instance to let us send and receive packets over UDP
 WiFiUDP udp;
+
+time_t  getNtpTime();
+
+
 
 
 void setup() {
@@ -110,7 +68,7 @@ void setup() {
   server.on("/gettime", []() {
 
     handleRoot();
-    getTime();
+    time_t  getNtpTime();
   });
 
   server.on("/HPheatstatus", []() {
@@ -226,6 +184,8 @@ void setup() {
   Serial.print("Local port: ");
   Serial.println(udp.localPort());
 
+  setSyncProvider(getNtpTime);
+  setSyncInterval(300);
   //Daikin IR stuff
 
   //setting some sane defaults so we know what's what
@@ -237,7 +197,8 @@ void setup() {
   daikinir.setSwingVertical(0); // swing off
   daikinir.send(); // send the command
 
-  getTime();
+
+
 }
 
 
@@ -245,81 +206,115 @@ void loop() {
 
   server.handleClient();
 
-  if (timeHour == 1 && timeMin == 1 && timeSec <= 30) {
-    getTime();
-  }
+
 }
 
+void handleRoot() {
+  digitalWrite(led, 1);
 
-void getTime() {
-  //NTP function
-  //get a random server from the pool
-  WiFi.hostByName(ntpServerName, timeServerIP);
+  String htmlContent = "<HTML><HEAD><TITLE>Besthaus Climate Control MK2</TITLE></HEAD>";
+  htmlContent += "<BODY><H1>Besthaus Climate Control MK2</H1>";
+  htmlContent += "<h4>Heat Pump Controls</h4><h5>";
 
-  sendNTPpacket(timeServerIP); // send an NTP packet to a time server
-  // wait to see if a reply is available
-  delay(1000);
+  String message = (String)hour();
+  if (minute() < 10) message += ":0"; else message += ":";
+  message += (String)minute();
+  if (second() < 10) message += ":0"; else message += ":";
+  message += (String)second();
+  if (day() < 10) message += " 0"; else message += " ";
+  message += (String)day();
+  if (month() < 10) message += "-0"; else message += "-";
+  message += (String)month();
+  message += "-";
+  message += (String)year();
 
-  int cb = udp.parsePacket();
-  if (!cb) {
-    Serial.println("no packet yet");
-  }
-  else {
-    Serial.print("packet received, length=");
-    Serial.println(cb);
-    // We've received a packet, read the data from it
-    udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
+  htmlContent += message;
 
-    //the timestamp starts at byte 40 of the received packet and is four bytes,
-    // or two words, long. First, esxtract the two words:
+  htmlContent += "</h5><a href=\"/HPheat\">Heat to 19 degrees C</a><br>";
+  htmlContent += "<a href=\"/HPcool\">Cool to 19 degrees C</a><br>";
+  htmlContent += "<a href=\"/HPauto\">Auto to 19 degrees C</a><br>";
+  htmlContent += "<a href=\"/HPoff\">OFF</a><br>";
+  htmlContent += "<a href=\"/gettime\">Update Time</a><br>";
 
-    unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-    unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-    // combine the four bytes (two words) into a long integer
-    // this is NTP time (seconds since Jan 1 1900):
-    unsigned long secsSince1900 = highWord << 16 | lowWord;
-    Serial.print("Seconds since Jan 1 1900 = " );
-    Serial.println(secsSince1900);
+  server.send(200, "text/html", htmlContent);
+  digitalWrite(led, 0);
 
-    // now convert NTP time into everyday time:
-    Serial.print("Unix time = ");
-    // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
-    const unsigned long seventyYears = 2208988800UL;
-    // subtract seventy years:
-    unsigned long epoch = secsSince1900 - seventyYears;
-    // print Unix time:
-    Serial.println(epoch);
-
-    // print the hour, minute and second:
-    Serial.print("The current UTC time is ");       // UTC is the time at Greenwich Meridian (GMT)
-
-    Serial.print(((epoch  % 86400L) / 3600)); // print the hour (86400 equals secs per day)
-    timeHour = (((epoch  % 86400L) / 3600));
-
-
-    //Serial.print(((epoch  % 86400L) / 3600)+ 11); // print the hour (86400 equals secs per day)
-    Serial.print(':');
-    if ( ((epoch % 3600) / 60) < 10 ) {
-      // In the first 10 minutes of each hour, we'll want a leading '0'
-      Serial.print('0');
-    }
-    Serial.print((epoch  % 3600) / 60); // print the minute (3600 equals secs per minute)
-    timeMin = ((epoch  % 3600) / 60);
-    Serial.print(':');
-    if ( (epoch % 60) < 10 ) {
-      // In the first 10 seconds of each minute, we'll want a leading '0'
-      Serial.print('0');
-    }
-    Serial.println(epoch % 60); // print the second
-    timeSec = (epoch % 60);
-
-
-  }
 }
 
-unsigned long sendNTPpacket(IPAddress& address)
+void handleNotFound() {
+  digitalWrite(led, 1);
+  String message = "File Not Found\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += (server.method() == HTTP_GET) ? "GET" : "POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+  for (uint8_t i = 0; i < server.args(); i++) {
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  }
+  server.send(404, "text/plain", message);
+  digitalWrite(led, 0);
+}
+
+void digitalClockDisplay()
 {
-  Serial.println("sending NTP packet...");
+  // digital clock display of the time
+  String message = (String)hour();
+  if (minute() < 10) message += ":0"; else message += ":";
+  message += (String)minute();
+  if (second() < 10) message += ":0"; else message += ":";
+  message += (String)second();
+  message += " ";
+  message += (String)day();
+  message += ".";
+  message += (String)month();
+  message += ".";
+  message += (String)year();
+  server.send(200, "text/html", message);
+
+}
+
+
+
+const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
+byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
+
+time_t getNtpTime()
+{
+  IPAddress ntpServerIP; // NTP server's ip address
+
+  while (udp.parsePacket() > 0) ; // discard any previously received packets
+  Serial.println("Transmit NTP Request");
+  // get a random server from the pool
+  WiFi.hostByName(ntpServerName, ntpServerIP);
+  Serial.print(ntpServerName);
+  Serial.print(": ");
+  Serial.println(ntpServerIP);
+  sendNTPpacket(ntpServerIP);
+  uint32_t beginWait = millis();
+  while (millis() - beginWait < 1500) {
+    int size = udp.parsePacket();
+    if (size >= NTP_PACKET_SIZE) {
+      Serial.println("Receive NTP Response");
+      udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
+      unsigned long secsSince1900;
+      // convert four bytes starting at location 40 to a long integer
+      secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
+      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
+      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
+      secsSince1900 |= (unsigned long)packetBuffer[43];
+      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+    }
+  }
+  Serial.println("No NTP Response :-(");
+  return 0; // return 0 if unable to get the time
+}
+
+// send an NTP request to the time server at the given address
+void sendNTPpacket(IPAddress &address)
+{
   // set all bytes in the buffer to 0
   memset(packetBuffer, 0, NTP_PACKET_SIZE);
   // Initialize values needed to form NTP request
@@ -329,11 +324,10 @@ unsigned long sendNTPpacket(IPAddress& address)
   packetBuffer[2] = 6;     // Polling Interval
   packetBuffer[3] = 0xEC;  // Peer Clock Precision
   // 8 bytes of zero for Root Delay & Root Dispersion
-  packetBuffer[12]  = 49;
-  packetBuffer[13]  = 0x4E;
-  packetBuffer[14]  = 49;
-  packetBuffer[15]  = 52;
-
+  packetBuffer[12] = 49;
+  packetBuffer[13] = 0x4E;
+  packetBuffer[14] = 49;
+  packetBuffer[15] = 52;
   // all NTP fields have been given values, now
   // you can send a packet requesting a timestamp:
   udp.beginPacket(address, 123); //NTP requests are to port 123
