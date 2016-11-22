@@ -9,17 +9,14 @@
 char ssid[] = "xxxxx";  //  your network SSID (name)
 char pass[] = "xxxxx";       // your network password
 
-int daylightSaving = 0;
-
 int timeHour = 0;
 int timeMin = 0;
 int timeSec = 0;
 
 
-int hpState = 0;
 int hpTemp = 19;
 
-IRDaikinESP dakinir(D1);
+IRDaikinESP daikinir(D1);
 
 //web server stuffs
 
@@ -31,14 +28,17 @@ void handleRoot() {
   digitalWrite(led, 1);
 
   char htmlContent[] = "<HTML><HEAD><TITLE>Besthaus Climate Control MK2</TITLE></HEAD>"
-                       "<BODY><H1>Besthaus Climate Control MK2</H1><h4>Heat Pump Controls</h2>"
+                       "<BODY><H1>Besthaus Climate Control MK2</H1>"
+                       "<h4>Heat Pump Controls</h4>"
                        "<a href=\"/HPheat\">Heat to 19 degrees C</a><br>"
                        "<a href=\"/HPcool\">Cool to 19 degrees C</a><br>"
                        "<a href=\"/HPauto\">Auto to 19 degrees C</a><br>"
-                       "<a href=\"/HPoff\">OFF</a><br>";
+                       "<a href=\"/HPoff\">OFF</a><br>"
+                       "<a href=\"/gettime\">Update Time</a><br>";
 
   server.send(200, "text/html", htmlContent);
   digitalWrite(led, 0);
+
 }
 
 
@@ -78,8 +78,9 @@ WiFiUDP udp;
 
 
 void setup() {
-  dakinir.begin();
-  //Serial.begin(115200);
+  Serial.begin(115200);
+  daikinir.begin();
+
 
   //web server stuff
 
@@ -106,67 +107,54 @@ void setup() {
 
   server.on("/", handleRoot);
 
-server.on("/checkstatus", []() {
-  
-  server.send(200, "text/plain", String(hpState));
-});
+  server.on("/gettime", []() {
+
+    handleRoot();
+    getTime();
+  });
 
   server.on("/HPheatstatus", []() {
 
-    switch (hpState) {
-      case 1:
-        server.send(200, "text/plain", "1");
-        break;
 
-      case 2:
-      case 3:
-      default:
-        server.send(200, "text/plain", "0");
-        break;
+    if (daikinir.getPower() == 1 && daikinir.getMode() == DAIKIN_HEAT) {
+
+      server.send(200, "text/plain", "1");
+    } else {
+      server.send(200, "text/plain", "0");
     }
   }
            );
 
   server.on("/HPcoolstatus", []() {
 
-    switch (hpState) {
-      case 2:
-        server.send(200, "text/plain", "1");
-        break;
+    if (daikinir.getPower() == 1 && daikinir.getMode() == DAIKIN_COOL) {
 
-      case 1:
-      case 3:
-      default:
-        server.send(200, "text/plain", "0");
-        break;
+      server.send(200, "text/plain", "1");
+    } else {
+      server.send(200, "text/plain", "0");
     }
   }
            );
+
   server.on("/HPautostatus", []() {
 
-    switch (hpState) {
-      case 3:
-        server.send(200, "text/plain", "1");
-        break;
+    if (daikinir.getPower() == 1 && daikinir.getMode() == DAIKIN_AUTO) {
 
-      case 1:
-      case 2:
-      default:
-        server.send(200, "text/plain", "0");
-        break;
+      server.send(200, "text/plain", "1");
+    } else {
+      server.send(200, "text/plain", "0");
     }
   }
            );
 
   server.on("/HPoff", []() {
-    hpState = 0;
 
-    dakinir.off();
-    dakinir.setFan(0);
-    dakinir.setMode(DAIKIN_AUTO);
-    dakinir.setTemp(hpTemp);
-    dakinir.setSwingVertical(0);
-    dakinir.send();
+    daikinir.off();
+    daikinir.setFan(0);
+    daikinir.setMode(DAIKIN_AUTO);
+    daikinir.setTemp(hpTemp);
+    daikinir.setSwingVertical(0);
+    daikinir.send();
     server.send(200, "text/plain", "OFF, as requested");
     Serial.println("Switched it OFF");
   });
@@ -174,14 +162,12 @@ server.on("/checkstatus", []() {
 
   server.on("/HPheat", []() {
 
-    hpState = 1;
-
-    dakinir.on();
-    dakinir.setFan(0);
-    dakinir.setMode(DAIKIN_HEAT);
-    dakinir.setTemp(hpTemp);
-    dakinir.setSwingVertical(0);
-    dakinir.send();
+    daikinir.on();
+    daikinir.setFan(0);
+    daikinir.setMode(DAIKIN_HEAT);
+    daikinir.setTemp(hpTemp);
+    daikinir.setSwingVertical(0);
+    daikinir.send();
     server.send(200, "text/html", "<p>Heat and 19 degrees, as requested</p>");
 
 
@@ -189,27 +175,25 @@ server.on("/checkstatus", []() {
   });
 
   server.on("/HPcool", []() {
-    hpState = 2;
 
-    dakinir.on();
-    dakinir.setFan(0);
-    dakinir.setMode(DAIKIN_COOL);
-    dakinir.setTemp(hpTemp);
-    dakinir.setSwingVertical(0);
-    dakinir.send();
+    daikinir.on();
+    daikinir.setFan(0);
+    daikinir.setMode(DAIKIN_COOL);
+    daikinir.setTemp(hpTemp);
+    daikinir.setSwingVertical(0);
+    daikinir.send();
     server.send(200, "text/plain", "Cool and 19 degrees, as requested");
     Serial.println("Switched it on to COOL");
   });
 
   server.on("/HPauto", []() {
-    hpState = 3;
 
-    dakinir.on();
-    dakinir.setFan(0);
-    dakinir.setMode(DAIKIN_AUTO);
-    dakinir.setTemp(hpTemp);
-    dakinir.setSwingVertical(0);
-    dakinir.send();
+    daikinir.on();
+    daikinir.setFan(0);
+    daikinir.setMode(DAIKIN_AUTO);
+    daikinir.setTemp(hpTemp);
+    daikinir.setSwingVertical(0);
+    daikinir.send();
     server.send(200, "text/plain", "Auto and 19 degrees, as requested");
     Serial.println("Switched it on to AUTO");
   });
@@ -246,14 +230,13 @@ server.on("/checkstatus", []() {
 
   //setting some sane defaults so we know what's what
 
-  dakinir.off();
-  dakinir.setFan(0);
-  dakinir.setMode(DAIKIN_AUTO);
-  dakinir.setTemp(hpTemp);
-  dakinir.setSwingVertical(0);
-  dakinir.send();
+  daikinir.off();
+  daikinir.setFan(0);  //fan speed = auto
+  daikinir.setMode(DAIKIN_AUTO); //mode = auto
+  daikinir.setTemp(hpTemp); // temp = default temp defined earlier, i.e. 19 deg C
+  daikinir.setSwingVertical(0); // swing off
+  daikinir.send(); // send the command
 
-  hpState = 0;
   getTime();
 }
 
@@ -262,7 +245,7 @@ void loop() {
 
   server.handleClient();
 
-  if (timeHour == 1) {
+  if (timeHour == 1 && timeMin == 1 && timeSec <= 30) {
     getTime();
   }
 }
@@ -308,21 +291,11 @@ void getTime() {
     Serial.println(epoch);
 
     // print the hour, minute and second:
-    Serial.print("The current time is ");       // UTC is the time at Greenwich Meridian (GMT)
+    Serial.print("The current UTC time is ");       // UTC is the time at Greenwich Meridian (GMT)
 
-    switch (daylightSaving) {
+    Serial.print(((epoch  % 86400L) / 3600)); // print the hour (86400 equals secs per day)
+    timeHour = (((epoch  % 86400L) / 3600));
 
-      case 1:
-        Serial.print(((epoch  % 86400L) / 3600) + 11); // print the hour (86400 equals secs per day)
-        timeHour = (((epoch  % 86400L) / 3600) + 11);
-        break;
-
-      default:
-      case 0:
-        Serial.print(((epoch  % 86400L) / 3600) + 10); // print the hour (86400 equals secs per day)
-        timeHour = (((epoch  % 86400L) / 3600) + 10);
-        break;
-    }
 
     //Serial.print(((epoch  % 86400L) / 3600)+ 11); // print the hour (86400 equals secs per day)
     Serial.print(':');
