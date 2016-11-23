@@ -203,6 +203,22 @@ void setup() {
 void loop() {
 
   server.handleClient();
+  timerOn(15, 0, 19, 0, DAIKIN_AUTO);
+
+}
+
+void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, uint8_t timerHpMode) {
+  time_t t = now(); // store the current time in time variable t
+  if (hour(t) == timerHour && minute(t) == timerMinute) {
+
+    daikinir.on();
+    daikinir.setFan(timerHpFan);  //fan speed = auto = 0, otherwise 1-5
+    daikinir.setMode(timerHpMode); //mode = auto = DAIKIN_AUTO
+    daikinir.setTemp(timerHpTemp); // temp = default temp defined earlier, i.e. 19 deg C
+    daikinir.setSwingVertical(0); // swing off
+    daikinir.send(); // send the command
+
+  }
 
 }
 
