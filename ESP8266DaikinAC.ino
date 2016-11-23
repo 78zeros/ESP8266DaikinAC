@@ -22,7 +22,7 @@ const int led = 13;
 
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
-IPAddress timeServerIP; 
+IPAddress timeServerIP;
 const char* ntpServerName = "time.iinet.net.au";
 
 const int timeZone = 11;
@@ -197,15 +197,12 @@ void setup() {
   daikinir.setSwingVertical(0); // swing off
   daikinir.send(); // send the command
 
-
-
 }
 
 
 void loop() {
 
   server.handleClient();
-
 
 }
 
@@ -257,26 +254,6 @@ void handleNotFound() {
   server.send(404, "text/plain", message);
   digitalWrite(led, 0);
 }
-
-void digitalClockDisplay()
-{
-  // digital clock display of the time
-  String message = (String)hour();
-  if (minute() < 10) message += ":0"; else message += ":";
-  message += (String)minute();
-  if (second() < 10) message += ":0"; else message += ":";
-  message += (String)second();
-  message += " ";
-  message += (String)day();
-  message += ".";
-  message += (String)month();
-  message += ".";
-  message += (String)year();
-  server.send(200, "text/html", message);
-
-}
-
-
 
 const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
