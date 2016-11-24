@@ -2,13 +2,10 @@
 #include <IRDaikinESP.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-#include <WiFiClient.h>
+//#include <WiFiClient.h> - don't actually need this right now
 #include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
 #include <TimeLib.h>
-
-char ssid[] = "xxxxx";  //  your network SSID (name)
-char pass[] = "xxxxx";       // your network password
+#include "Credentials.h" // moved wifi credentials out into header file
 
 int hpTemp = 19;
 
@@ -23,7 +20,7 @@ const int led = 13;
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
 IPAddress timeServerIP;
-const char* ntpServerName = "time.iinet.net.au";
+const char* ntpServerName = "au.pool.ntp.org";
 
 const int timeZone = 11;
 
@@ -44,14 +41,15 @@ void setup() {
 
   pinMode(led, OUTPUT);
   digitalWrite(led, 0);
-  //  Serial.begin(115200);
+  //Serial.begin(115200);
+  delay(1000); //give everything else a moment to init
   WiFi.begin(ssid, pass);
   Serial.println("");
 
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    Serial.print(WiFi.status());
   }
   Serial.println("");
   Serial.print("Connected to ");
@@ -59,17 +57,7 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  if (MDNS.begin("esp8266")) {
-    Serial.println("MDNS responder started");
-  }
-
   server.on("/", handleRoot);
-
-  server.on("/gettime", []() {
-
-    handleRoot();
-    time_t  getNtpTime();
-  });
 
   server.on("/HPheatstatus", []() {
 
@@ -113,8 +101,16 @@ void setup() {
     daikinir.setTemp(hpTemp);
     daikinir.setSwingVertical(0);
     daikinir.send();
-    server.send(200, "text/plain", "OFF, as requested");
     Serial.println("Switched it OFF");
+
+    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
+    String ipAddress = WiFi.localIP().toString();
+    htmlContent += ipAddress;
+
+    htmlContent += "\" /></head><p>OFF, as requested</p>";
+
+    server.send(200, "text/html", htmlContent);
+
   });
 
 
@@ -126,10 +122,17 @@ void setup() {
     daikinir.setTemp(hpTemp);
     daikinir.setSwingVertical(0);
     daikinir.send();
-    server.send(200, "text/html", "<p>Heat and 19 degrees, as requested</p>");
 
 
     Serial.println("Switched it on to HEAT");
+
+    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
+    String ipAddress = WiFi.localIP().toString();
+    htmlContent += ipAddress;
+
+    htmlContent += "\" /></head><p>HEAT, as requested</p>";
+
+    server.send(200, "text/html", htmlContent);
   });
 
   server.on("/HPcool", []() {
@@ -140,8 +143,16 @@ void setup() {
     daikinir.setTemp(hpTemp);
     daikinir.setSwingVertical(0);
     daikinir.send();
-    server.send(200, "text/plain", "Cool and 19 degrees, as requested");
     Serial.println("Switched it on to COOL");
+
+    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
+    String ipAddress = WiFi.localIP().toString();
+    htmlContent += ipAddress;
+
+    htmlContent += "\" /></head><p>COOL, as requested</p>";
+
+    server.send(200, "text/html", htmlContent);
+
   });
 
   server.on("/HPauto", []() {
@@ -152,8 +163,14 @@ void setup() {
     daikinir.setTemp(hpTemp);
     daikinir.setSwingVertical(0);
     daikinir.send();
-    server.send(200, "text/plain", "Auto and 19 degrees, as requested");
     Serial.println("Switched it on to AUTO");
+    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
+    String ipAddress = WiFi.localIP().toString();
+    htmlContent += ipAddress;
+
+    htmlContent += "\" /></head><p>AUTO, as requested</p>";
+
+    server.send(200, "text/html", htmlContent);
   });
 
 
@@ -163,29 +180,12 @@ void setup() {
   Serial.println("HTTP server started");
 
   //NTP stuff
-
-  // We start by connecting to a WiFi network
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  //  WiFi.begin(ssid, pass);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-
   Serial.println("Starting UDP");
   udp.begin(localPort);
   Serial.print("Local port: ");
   Serial.println(udp.localPort());
 
-  setSyncProvider(getNtpTime);
-  setSyncInterval(300);
+
   //Daikin IR stuff
 
   //setting some sane defaults so we know what's what
@@ -197,49 +197,64 @@ void setup() {
   daikinir.setSwingVertical(0); // swing off
   daikinir.send(); // send the command
 
+  // Set up the NTP sync schedule - do this last because of the delays
+
+  setSyncProvider(getNtpTime);
+  setSyncInterval(300);
+
 }
 
 
 void loop() {
 
   server.handleClient();
-  timerOn(15, 0, 19, 0, DAIKIN_AUTO);
+  timerOn(15, 24, 19, 0, DAIKIN_AUTO, 1); // 3pm, 19 deg, auto fan, auto mode, swing on
 
 }
 
-void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, uint8_t timerHpMode) {
+void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, uint8_t timerHpMode, int timerHpSwing) {
   time_t t = now(); // store the current time in time variable t
-  if (hour(t) == timerHour && minute(t) == timerMinute) {
+
+  if (hour(t) == timerHour && minute(t) == timerMinute && second(t) == 1) {
 
     daikinir.on();
     daikinir.setFan(timerHpFan);  //fan speed = auto = 0, otherwise 1-5
-    daikinir.setMode(timerHpMode); //mode = auto = DAIKIN_AUTO
+    daikinir.setMode(timerHpMode); //mode = auto = DAIKIN_AUTO, _HEAT, _COOL, _DRY
     daikinir.setTemp(timerHpTemp); // temp = default temp defined earlier, i.e. 19 deg C
-    daikinir.setSwingVertical(0); // swing off
+    daikinir.setSwingVertical(timerHpSwing); // swing on/off 1/0
     daikinir.send(); // send the command
-
+    Serial.println("Timer Triggered");
+    Serial.println("");
+    delay(1000);
   }
 
 }
+
+
 
 void handleRoot() {
   digitalWrite(led, 1);
 
   String htmlContent = "<HTML><HEAD><TITLE>Besthaus Climate Control MK2</TITLE></HEAD>";
   htmlContent += "<BODY><H1>Besthaus Climate Control MK2</H1>";
-  htmlContent += "<h4>Heat Pump Controls</h4><h5>";
+  htmlContent += "<h4>Heat Pump Controls</h4>";
 
-  String message = (String)hour();
+  String message = "<h5>";
+  if (hour() < 10) message += "Time: 0"; else message += "Time: ";
+  message += (String)hour();
   if (minute() < 10) message += ":0"; else message += ":";
   message += (String)minute();
   if (second() < 10) message += ":0"; else message += ":";
   message += (String)second();
-  if (day() < 10) message += " 0"; else message += " ";
+  if (day() < 10) message += " | Date: 0"; else message += "  Date: ";
   message += (String)day();
   if (month() < 10) message += "-0"; else message += "-";
   message += (String)month();
   message += "-";
   message += (String)year();
+  message += "  IP Address: ";
+  String ipAddress = WiFi.localIP().toString();
+  message += ipAddress;
 
   htmlContent += message;
 
@@ -247,8 +262,6 @@ void handleRoot() {
   htmlContent += "<a href=\"/HPcool\">Cool to 19 degrees C</a><br>";
   htmlContent += "<a href=\"/HPauto\">Auto to 19 degrees C</a><br>";
   htmlContent += "<a href=\"/HPoff\">OFF</a><br>";
-  htmlContent += "<a href=\"/gettime\">Update Time</a><br>";
-
   server.send(200, "text/html", htmlContent);
   digitalWrite(led, 0);
 
@@ -298,6 +311,7 @@ time_t getNtpTime()
       secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
       secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
       secsSince1900 |= (unsigned long)packetBuffer[43];
+      Serial.println(secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR);
       return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
     }
   }
@@ -327,3 +341,4 @@ void sendNTPpacket(IPAddress &address)
   udp.write(packetBuffer, NTP_PACKET_SIZE);
   udp.endPacket();
 }
+
