@@ -2,10 +2,11 @@
 #include <IRDaikinESP.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-//#include <WiFiClient.h> - don't actually need this right now
+//#include <WiFiClient.h> // don't actually need this right now
 #include <ESP8266WebServer.h>
 #include <TimeLib.h>
 #include "Credentials.h" // moved wifi credentials out into header file
+//#include <ArduinoOTA.h> // will look to add in OTA updating when I get the rest working!
 
 int hpTemp = 19;
 
@@ -96,13 +97,13 @@ void setup() {
   server.on("/HPoff", []() {
 
     daikinir.off();
-    daikinir.setFan(0);
-    daikinir.setMode(DAIKIN_AUTO);
-    daikinir.setTemp(hpTemp);
-    daikinir.setSwingVertical(0);
+    //daikinir.setFan(0);
+    //daikinir.setMode(DAIKIN_AUTO);
+    //daikinir.setTemp(hpTemp);
+    //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it OFF");
-
+/*
     String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
     String ipAddress = WiFi.localIP().toString();
     htmlContent += ipAddress;
@@ -110,22 +111,22 @@ void setup() {
     htmlContent += "\" /></head><p>OFF, as requested</p>";
 
     server.send(200, "text/html", htmlContent);
-
+*/
   });
 
 
   server.on("/HPheat", []() {
 
     daikinir.on();
-    daikinir.setFan(0);
+    //daikinir.setFan(0);
     daikinir.setMode(DAIKIN_HEAT);
-    daikinir.setTemp(hpTemp);
-    daikinir.setSwingVertical(0);
+    //daikinir.setTemp(hpTemp);
+    //daikinir.setSwingVertical(0);
     daikinir.send();
 
 
     Serial.println("Switched it on to HEAT");
-
+    /*
     String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
     String ipAddress = WiFi.localIP().toString();
     htmlContent += ipAddress;
@@ -133,18 +134,19 @@ void setup() {
     htmlContent += "\" /></head><p>HEAT, as requested</p>";
 
     server.send(200, "text/html", htmlContent);
+ */
   });
 
   server.on("/HPcool", []() {
 
     daikinir.on();
-    daikinir.setFan(0);
+    //daikinir.setFan(0);
     daikinir.setMode(DAIKIN_COOL);
-    daikinir.setTemp(hpTemp);
-    daikinir.setSwingVertical(0);
+    //daikinir.setTemp(hpTemp);
+    //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it on to COOL");
-
+/*
     String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
     String ipAddress = WiFi.localIP().toString();
     htmlContent += ipAddress;
@@ -152,7 +154,7 @@ void setup() {
     htmlContent += "\" /></head><p>COOL, as requested</p>";
 
     server.send(200, "text/html", htmlContent);
-
+*/
   });
 
   server.on("/HPauto", []() {
@@ -164,13 +166,15 @@ void setup() {
     daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it on to AUTO");
-    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
+   /* String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
     String ipAddress = WiFi.localIP().toString();
     htmlContent += ipAddress;
 
     htmlContent += "\" /></head><p>AUTO, as requested</p>";
 
     server.send(200, "text/html", htmlContent);
+
+    */
   });
 
 
@@ -194,7 +198,7 @@ void setup() {
   daikinir.setFan(0);  //fan speed = auto
   daikinir.setMode(DAIKIN_AUTO); //mode = auto
   daikinir.setTemp(hpTemp); // temp = default temp defined earlier, i.e. 19 deg C
-  daikinir.setSwingVertical(0); // swing off
+  daikinir.setSwingVertical(1); // swing on
   daikinir.send(); // send the command
 
   // Set up the NTP sync schedule - do this last because of the delays
@@ -208,7 +212,7 @@ void setup() {
 void loop() {
 
   server.handleClient();
-  timerOn(15, 24, 19, 0, DAIKIN_AUTO, 1); // 3pm, 19 deg, auto fan, auto mode, swing on
+  timerOn(15, 0, 19, 0, DAIKIN_AUTO, 1); // 3pm, 19 deg, auto fan, auto mode, swing on
 
 }
 
@@ -235,11 +239,11 @@ void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, ui
 void handleRoot() {
   digitalWrite(led, 1);
 
-  String htmlContent = "<HTML><HEAD><TITLE>Besthaus Climate Control MK2</TITLE></HEAD>";
+  /* String htmlContent = "<HTML><HEAD><TITLE>Besthaus Climate Control MK2</TITLE></HEAD>";
   htmlContent += "<BODY><H1>Besthaus Climate Control MK2</H1>";
   htmlContent += "<h4>Heat Pump Controls</h4>";
-
-  String message = "<h5>";
+*/
+  String message = "Hello. ";
   if (hour() < 10) message += "Time: 0"; else message += "Time: ";
   message += (String)hour();
   if (minute() < 10) message += ":0"; else message += ":";
@@ -256,13 +260,14 @@ void handleRoot() {
   String ipAddress = WiFi.localIP().toString();
   message += ipAddress;
 
-  htmlContent += message;
+  /* htmlContent += message;
 
   htmlContent += "</h5><a href=\"/HPheat\">Heat to 19 degrees C</a><br>";
   htmlContent += "<a href=\"/HPcool\">Cool to 19 degrees C</a><br>";
   htmlContent += "<a href=\"/HPauto\">Auto to 19 degrees C</a><br>";
-  htmlContent += "<a href=\"/HPoff\">OFF</a><br>";
-  server.send(200, "text/html", htmlContent);
+  htmlContent += "<a href=\"/HPoff\">OFF</a><br><br>";
+  */
+  server.send(200, "text/plain", message);
   digitalWrite(led, 0);
 
 }
@@ -341,4 +346,3 @@ void sendNTPpacket(IPAddress &address)
   udp.write(packetBuffer, NTP_PACKET_SIZE);
   udp.endPacket();
 }
-
