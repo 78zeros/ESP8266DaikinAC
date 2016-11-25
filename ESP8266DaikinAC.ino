@@ -97,21 +97,9 @@ void setup() {
   server.on("/HPoff", []() {
 
     daikinir.off();
-    //daikinir.setFan(0);
-    //daikinir.setMode(DAIKIN_AUTO);
-    //daikinir.setTemp(hpTemp);
-    //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it OFF");
-/*
-    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
-    String ipAddress = WiFi.localIP().toString();
-    htmlContent += ipAddress;
 
-    htmlContent += "\" /></head><p>OFF, as requested</p>";
-
-    server.send(200, "text/html", htmlContent);
-*/
   });
 
 
@@ -123,18 +111,8 @@ void setup() {
     //daikinir.setTemp(hpTemp);
     //daikinir.setSwingVertical(0);
     daikinir.send();
-
-
     Serial.println("Switched it on to HEAT");
-    /*
-    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
-    String ipAddress = WiFi.localIP().toString();
-    htmlContent += ipAddress;
 
-    htmlContent += "\" /></head><p>HEAT, as requested</p>";
-
-    server.send(200, "text/html", htmlContent);
- */
   });
 
   server.on("/HPcool", []() {
@@ -146,35 +124,18 @@ void setup() {
     //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it on to COOL");
-/*
-    String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
-    String ipAddress = WiFi.localIP().toString();
-    htmlContent += ipAddress;
-
-    htmlContent += "\" /></head><p>COOL, as requested</p>";
-
-    server.send(200, "text/html", htmlContent);
-*/
   });
 
   server.on("/HPauto", []() {
 
     daikinir.on();
-    daikinir.setFan(0);
+    //daikinir.setFan(0);
     daikinir.setMode(DAIKIN_AUTO);
-    daikinir.setTemp(hpTemp);
-    daikinir.setSwingVertical(0);
+    //daikinir.setTemp(hpTemp);
+    //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it on to AUTO");
-   /* String htmlContent = "<head><meta http-equiv=\"Refresh\" content=\"0; url=http://";
-    String ipAddress = WiFi.localIP().toString();
-    htmlContent += ipAddress;
 
-    htmlContent += "\" /></head><p>AUTO, as requested</p>";
-
-    server.send(200, "text/html", htmlContent);
-
-    */
   });
 
 
@@ -213,7 +174,7 @@ void loop() {
 
   server.handleClient();
   timerOn(15, 0, 19, 0, DAIKIN_AUTO, 1); // 3pm, 19 deg, auto fan, auto mode, swing on
-
+  timerOff(22, 5); //10:05pm
 }
 
 void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, uint8_t timerHpMode, int timerHpSwing) {
@@ -227,7 +188,7 @@ void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, ui
     daikinir.setTemp(timerHpTemp); // temp = default temp defined earlier, i.e. 19 deg C
     daikinir.setSwingVertical(timerHpSwing); // swing on/off 1/0
     daikinir.send(); // send the command
-    Serial.println("Timer Triggered");
+    Serial.println("On Timer Triggered");
     Serial.println("");
     delay(1000);
   }
@@ -235,14 +196,23 @@ void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, ui
 }
 
 
+void timerOff(int timerHour, int timerMinute) {
+  time_t t = now(); // store the current time in time variable t
+
+  if (hour(t) == timerHour && minute(t) == timerMinute && second(t) == 1) {
+
+    daikinir.off();
+    daikinir.send(); // send the command
+    Serial.println("Off Timer Triggered");
+    Serial.println("");
+    delay(1000);
+  }
+
+}
 
 void handleRoot() {
   digitalWrite(led, 1);
 
-  /* String htmlContent = "<HTML><HEAD><TITLE>Besthaus Climate Control MK2</TITLE></HEAD>";
-  htmlContent += "<BODY><H1>Besthaus Climate Control MK2</H1>";
-  htmlContent += "<h4>Heat Pump Controls</h4>";
-*/
   String message = "Hello. ";
   if (hour() < 10) message += "Time: 0"; else message += "Time: ";
   message += (String)hour();
@@ -259,14 +229,6 @@ void handleRoot() {
   message += "  IP Address: ";
   String ipAddress = WiFi.localIP().toString();
   message += ipAddress;
-
-  /* htmlContent += message;
-
-  htmlContent += "</h5><a href=\"/HPheat\">Heat to 19 degrees C</a><br>";
-  htmlContent += "<a href=\"/HPcool\">Cool to 19 degrees C</a><br>";
-  htmlContent += "<a href=\"/HPauto\">Auto to 19 degrees C</a><br>";
-  htmlContent += "<a href=\"/HPoff\">OFF</a><br><br>";
-  */
   server.send(200, "text/plain", message);
   digitalWrite(led, 0);
 
