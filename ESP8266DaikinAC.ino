@@ -2,21 +2,17 @@
 #include <IRDaikinESP.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-//#include <WiFiClient.h> // don't actually need this right now
 #include <ESP8266WebServer.h>
 #include <TimeLib.h>
 #include "Credentials.h" // moved wifi credentials out into header file
-//#include <ArduinoOTA.h> // will look to add in OTA updating when I get the rest working!
+
+#define TRIGGER_PIN 0
 
 int hpTemp = 19;
 
 IRDaikinESP daikinir(D1);
 
-//web server stuffs
-
 ESP8266WebServer server(80);
-
-const int led = 13;
 
 unsigned int localPort = 2390;      // local port to listen for UDP packets
 
@@ -25,43 +21,34 @@ const char* ntpServerName = "au.pool.ntp.org";
 
 const int timeZone = 11;
 
-// A UDP instance to let us send and receive packets over UDP
 WiFiUDP udp;
 
 time_t  getNtpTime();
 
 
-
-
 void setup() {
+
   Serial.begin(115200);
   daikinir.begin();
 
-
-  //web server stuff
-
-  pinMode(led, OUTPUT);
-  digitalWrite(led, 0);
-  //Serial.begin(115200);
-  delay(1000); //give everything else a moment to init
   WiFi.begin(ssid, pass);
   Serial.println("");
 
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED) { // Wait for connection
     delay(500);
     Serial.print(WiFi.status());
   }
   Serial.println("");
   Serial.print("Connected to ");
-  Serial.println(ssid);
+  Serial.println(WiFi.SSID());
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+// Webserver definitions
 
   server.on("/", handleRoot);
 
   server.on("/HPheatstatus", []() {
-
 
     if (daikinir.getPower() == 1 && daikinir.getMode() == DAIKIN_HEAT) {
 
@@ -99,7 +86,7 @@ void setup() {
     daikinir.off();
     daikinir.send();
     Serial.println("Switched it OFF");
-
+    server.send(200, "text/plain", "OK\r\n");
   });
 
 
@@ -112,7 +99,7 @@ void setup() {
     //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it on to HEAT");
-
+    server.send(200, "text/plain", "OK\r\n");
   });
 
   server.on("/HPcool", []() {
@@ -124,6 +111,7 @@ void setup() {
     //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it on to COOL");
+    server.send(200, "text/plain", "OK\r\n");
   });
 
   server.on("/HPauto", []() {
@@ -135,9 +123,8 @@ void setup() {
     //daikinir.setSwingVertical(0);
     daikinir.send();
     Serial.println("Switched it on to AUTO");
-
+    server.send(200, "text/plain", "OK\r\n");
   });
-
 
   server.onNotFound(handleNotFound);
 
@@ -150,9 +137,7 @@ void setup() {
   Serial.print("Local port: ");
   Serial.println(udp.localPort());
 
-
   //Daikin IR stuff
-
   //setting some sane defaults so we know what's what
 
   daikinir.off();
@@ -169,15 +154,25 @@ void setup() {
 
 }
 
-
 void loop() {
 
+  if ( digitalRead(TRIGGER_PIN) == LOW ) {
+    daikinir.off();
+    daikinir.send(); // send the command
+    delay(500);
+    Serial.println("Off Button Triggered");
+  }
+
   server.handleClient();
+
+  if (timeStatus() == timeNotSet || timeStatus() == timeNeedsSync) setSyncInterval(30);
+
   timerOn(15, 0, 19, 0, DAIKIN_AUTO, 1); // 3pm, 19 deg, auto fan, auto mode, swing on
   timerOff(22, 5); //10:05pm
+
 }
 
-void timerOn(int timerHour, int timerMinute, int timerHpTemp, int timerHpFan, uint8_t timerHpMode, int timerHpSwing) {
+void timerOn(uint8_t timerHour, uint8_t timerMinute, uint8_t timerHpTemp, uint8_t timerHpFan, uint8_t timerHpMode, uint8_t timerHpSwing) {
   time_t t = now(); // store the current time in time variable t
 
   if (hour(t) == timerHour && minute(t) == timerMinute && second(t) == 1) {
@@ -211,7 +206,6 @@ void timerOff(int timerHour, int timerMinute) {
 }
 
 void handleRoot() {
-  digitalWrite(led, 1);
 
   String message = "Hello. ";
   if (hour() < 10) message += "Time: 0"; else message += "Time: ";
@@ -220,22 +214,23 @@ void handleRoot() {
   message += (String)minute();
   if (second() < 10) message += ":0"; else message += ":";
   message += (String)second();
-  if (day() < 10) message += " | Date: 0"; else message += "  Date: ";
+  if (day() < 10) message += " --- Date: 0"; else message += "  Date: ";
   message += (String)day();
   if (month() < 10) message += "-0"; else message += "-";
   message += (String)month();
   message += "-";
   message += (String)year();
-  message += "  IP Address: ";
+  message += " --- IP Address: ";
   String ipAddress = WiFi.localIP().toString();
   message += ipAddress;
+  message += "\r\n";
   server.send(200, "text/plain", message);
-  digitalWrite(led, 0);
+  Serial.println(message);
 
 }
 
 void handleNotFound() {
-  digitalWrite(led, 1);
+
   String message = "File Not Found\n\n";
   message += "URI: ";
   message += server.uri();
@@ -246,9 +241,13 @@ void handleNotFound() {
   message += "\n";
   for (uint8_t i = 0; i < server.args(); i++) {
     message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+    if (server.argName(i) == "test" && server.arg(i) == "test") {
+      Serial.println("success");
+    }
+
   }
   server.send(404, "text/plain", message);
-  digitalWrite(led, 0);
+
 }
 
 const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
