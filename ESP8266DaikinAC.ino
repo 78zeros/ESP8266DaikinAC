@@ -5,6 +5,7 @@
 #include <ESP8266WebServer.h>
 #include <TimeLib.h>
 #include "Credentials.h" // moved wifi credentials out into header file
+#include <EEPROM.h>
 
 #define TRIGGER_PIN 0
 
@@ -21,6 +22,8 @@ const char* ntpServerName = "au.pool.ntp.org";
 
 const int timeZone = 11;
 
+String dataToRead;
+
 WiFiUDP udp;
 
 time_t  getNtpTime();
@@ -30,13 +33,13 @@ void setup() {
 
   Serial.begin(115200);
   daikinir.begin();
-
+  EEPROM.begin(512);
   WiFi.begin(ssid, pass);
-  Serial.println("");
+  Serial.println("\r\nConnecting...");
 
   while (WiFi.status() != WL_CONNECTED) { // Wait for connection
     delay(500);
-    Serial.print(WiFi.status());
+    Serial.print(".");
   }
   Serial.println("");
   Serial.print("Connected to ");
@@ -44,7 +47,7 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-// Webserver definitions
+  // Webserver definitions
 
   server.on("/", handleRoot);
 
@@ -126,6 +129,147 @@ void setup() {
     server.send(200, "text/plain", "OK\r\n");
   });
 
+  // completely experimental
+
+  server.on("/HPtimerread", []() {
+
+
+    for (int i = 0; i < 26; i++) {
+
+      dataToRead += char(EEPROM.read(i));
+      Serial.print("Read: ");
+      Serial.println(dataToRead[i]);
+    }
+    //Serial.println(dataToRead);
+    Serial.println("");
+//
+//    String hpTestVar;
+//    hpTestVar += char(EEPROM.read(0));
+//    hpTestVar += char(EEPROM.read(1));
+//    int hpTestVar2 = hpTestVar.toInt();
+//
+//    for (int i = 0; i < 19; i++) {
+//      Serial.print(dataToRead[i]);
+//      switch (i) {
+//        case 1:
+//        case 3:
+//        case 5:
+//        case 6:
+//        case 7:
+//          Serial.print(",");
+//          break;
+//        default:
+//          break;
+//      }
+//    }
+//    Serial.println(dataToRead);
+//    Serial.println(hpTestVar2);
+
+server.send(200, "text/plain", "OK\r\n");
+  });
+
+
+  server.on("/HPtimerset", []() {
+
+    String dataToWrite;
+
+    for (uint8_t i = 0; i < server.args(); i++) {
+
+      if (i == 7 ||i == 9) {
+        dataToWrite += addZero(server.arg(i));
+      }
+      else
+      {
+        dataToWrite += server.arg(i);
+      }
+    }
+
+//    Serial.println("This is what I will write");
+//    Serial.println(dataToWrite);
+//
+//uint8_t dummyDays = "1111111";
+
+ 
+
+    for (int i = 0; i < 26; i++) {
+        
+      EEPROM.write(i, dataToWrite[i]);
+      Serial.print("Wrote: ");
+      Serial.println(dataToWrite[i]);
+    }
+    EEPROM.commit();
+    Serial.println("");
+
+//
+//    // timerOn(15, 0, 19, 0, 1, DAIKIN_AUTO); // 3pm, 19 deg, auto fan, swing on, auto mode
+//    Serial.println("You requested:");
+//    Serial.print("Turning on at ");
+//
+//
+//
+//    int onHour = server.arg(0).toInt();
+//
+//    if (onHour < 10 && !server.arg(0).startsWith("0")) {
+//      String onHourStr = "0";
+//      onHourStr += server.arg(0);
+//      Serial.print(onHourStr);
+//    }
+//    else {
+//      String onHourStr = "";
+//      onHourStr += server.arg(0);
+//      Serial.print(onHourStr);
+//    }
+//
+//    int onMin = server.arg(1).toInt();
+//
+//    if (onMin < 10 && !server.arg(1).startsWith("0")) {
+//      String onMinStr = "0";
+//      onMinStr += server.arg(1);
+//      Serial.print(onMinStr);
+//    }
+//    else {
+//      String onMinStr = "";
+//      onMinStr += server.arg(1);
+//      Serial.print(onMinStr);
+//    }
+//
+//    //Serial.print(server.arg(1));
+//    Serial.println("");
+//    Serial.print(server.arg(2));
+//    Serial.print(" degrees\r\n");
+//
+//    int fanSpeed = server.arg(3).toInt();
+//
+//    switch (fanSpeed) {
+//      case 0:
+//        Serial.println("Auto Fan");
+//        break;
+//      default:
+//        Serial.print("Fan Speed: ");
+//        Serial.print(server.arg(3));
+//        break;
+//    }
+//
+//    int swingMode = server.arg(4).toInt();
+//
+//    switch (swingMode) {
+//      case 0:
+//        Serial.println("Swing Off");
+//        break;
+//      default:
+//        Serial.println("Swing On");
+//        break;
+//    }
+//    Serial.print("Selected mode: ");
+//    Serial.print(server.arg(5));
+//    Serial.println("");
+
+
+    server.send(200, "text/plain", "OK\r\n");
+  });
+
+
+
   server.onNotFound(handleNotFound);
 
   server.begin();
@@ -165,14 +309,14 @@ void loop() {
 
   server.handleClient();
 
-  if (timeStatus() == timeNotSet || timeStatus() == timeNeedsSync) setSyncInterval(30);
+  //if (timeStatus() == timeNotSet || timeStatus() == timeNeedsSync) setSyncInterval(30);
 
-  timerOn(15, 0, 19, 0, DAIKIN_AUTO, 1); // 3pm, 19 deg, auto fan, auto mode, swing on
-  timerOff(22, 5); //10:05pm
-
+//  timerOn(15, 0, 19, 0, 1, DAIKIN_AUTO); // 3pm, 19 deg, auto fan, swing on, auto mode
+//  timerOff(22, 5); //10:05pm
+  timerOnEEPROM();
 }
 
-void timerOn(uint8_t timerHour, uint8_t timerMinute, uint8_t timerHpTemp, uint8_t timerHpFan, uint8_t timerHpMode, uint8_t timerHpSwing) {
+void timerOn(uint8_t timerHour, uint8_t timerMinute, uint8_t timerHpTemp, uint8_t timerHpFan, uint8_t timerHpSwing, uint8_t timerHpMode) {
   time_t t = now(); // store the current time in time variable t
 
   if (hour(t) == timerHour && minute(t) == timerMinute && second(t) == 1) {
@@ -190,17 +334,71 @@ void timerOn(uint8_t timerHour, uint8_t timerMinute, uint8_t timerHpTemp, uint8_
 
 }
 
+void timerOnEEPROM() {
+
+  time_t t = now();
+
+  String timerHour;
+  timerHour += char(EEPROM.read(7));
+  timerHour += char(EEPROM.read(8));
+
+  String timerMinute;
+  timerMinute += char(EEPROM.read(9));
+  timerMinute += char(EEPROM.read(10));
+
+  char timerHpTemp;
+  timerHpTemp += char(EEPROM.read(11));
+  timerHpTemp += char(EEPROM.read(12));
+
+
+  char timerHpFan = char(EEPROM.read(13));
+  char timerHpSwing = char(EEPROM.read(14));
+
+  char timerHpMode;
+
+  for (int i = 15; i < 26; i++) {
+    timerHpMode += char(EEPROM.read(i));
+  }
+
+
+  if (hour(t) == timerHour.toInt() && minute(t) == timerMinute.toInt() && second(t) == 1) {
+
+    daikinir.on();
+    daikinir.setFan(timerHpFan);  //fan speed = auto = 0, otherwise 1-5
+    daikinir.setMode(timerHpMode); //mode = auto = DAIKIN_AUTO, _HEAT, _COOL, _DRY
+    daikinir.setTemp(timerHpTemp); // temp = default temp defined earlier, i.e. 19 deg C
+    daikinir.setSwingVertical(timerHpSwing); // swing on/off 1/0
+    daikinir.send(); // send the command
+    Serial.println("EEPROM On Timer Triggered");
+    Serial.println("");
+    delay(1000);
+
+  }
+
+}
 
 void timerOff(int timerHour, int timerMinute) {
   time_t t = now(); // store the current time in time variable t
 
-  if (hour(t) == timerHour && minute(t) == timerMinute && second(t) == 1) {
-
+  if (hour(t) == timerHour && minute(t) == timerMinute && second(t) == 1 && daikinir.getPower() == 1) {
     daikinir.off();
     daikinir.send(); // send the command
     Serial.println("Off Timer Triggered");
     Serial.println("");
     delay(1000);
+  }
+}
+
+
+String addZero(String val) {
+
+  int tempVal = val.toInt();
+  if (tempVal < 10 && !val.startsWith("0")) {
+    String zeroVal = "0";
+    zeroVal += val;
+    return zeroVal;
+  } else {
+    return val;
   }
 
 }
@@ -224,7 +422,32 @@ void handleRoot() {
   String ipAddress = WiFi.localIP().toString();
   message += ipAddress;
   message += "\r\n";
-  server.send(200, "text/plain", message);
+  // for ( int i =0; i < 26; i++ ) message += EEPROM.read(i);
+  message += "<html><br><hr><form method='post' action='HPtimerset'>";
+  message += "<label>Repeat each: </label><input type='hidden' name='mon' value='1' checked>Monday ";
+  message += "<input type='hidden' name='tue' value='1' checked>Tuesday ";
+  message += "<input type='hidden' name='wed' value='1' checked>Wednesday ";
+  message += "<input type='hidden' name='thu' value='1' checked>Thursday ";
+  message += "<input type='hidden' name='fri' value='1' checked>Friday ";
+  message += "<input type='hidden' name='sat' value='1' checked>Saturday ";
+  message += "<input type='hidden' name='sun' value='1' checked>Sunday<br>";
+  message += "<label>Hour 0-23: </label><input type='number' name='hour' min='0' max='23' size='2'>";
+  message += "<label>Minute 0-59: </label><input type='number' name='min' min='0' max='59' size='2'><br>";
+  message += "<label>Temperature 14</label><input type ='range' name='temp' min='14' max='35' value='19'>35<br>";
+  message += "<label>Fan (0=auto, 1-5): </label><input name='fan' size='1' value='0'><br>";
+  message += "<label>Swing<br></label>";
+  message += "<input type='radio' name='swing' value='1' checked>On ";
+  message += "<input type='radio' name='swing' value='0'>Off<br>";
+  message += "<label>Mode<br></label>";
+  message += "<input type='radio' name='mode' value='DAIKIN_AUTO' checked>Auto ";
+  message += "<input type='radio' name='mode' value='DAIKIN_HEAT'>Heat ";
+  message += "<input type='radio' name='mode' value='DAIKIN_COOL'>Cool ";
+  message += "<input type='radio' name='mode' value='DAIKIN_DRY'>Dry <br>";
+  message += "<input type='submit'></form>";
+  message += "</html>";
+  // timerOn(15, 0, 19, 0, 1, DAIKIN_AUTO); // 3pm, 19 deg, auto fan, swing on, auto mode
+  // mode = auto = DAIKIN_AUTO, _HEAT, _COOL, _DRY
+  server.send(200, "text/html", message);
   Serial.println(message);
 
 }
@@ -269,7 +492,7 @@ time_t getNtpTime()
   while (millis() - beginWait < 1500) {
     int size = udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
-      Serial.println("Receive NTP Response");
+      Serial.println("Received NTP Response");
       udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
       unsigned long secsSince1900;
       // convert four bytes starting at location 40 to a long integer
@@ -277,7 +500,7 @@ time_t getNtpTime()
       secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
       secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
       secsSince1900 |= (unsigned long)packetBuffer[43];
-      Serial.println(secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR);
+      //Serial.println(secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR);
       return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
     }
   }
